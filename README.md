@@ -1,56 +1,43 @@
 # GAFR-RegNet for GPR Image-Level Risk Recognition
 
-This repository contains the code for image-level ground-penetrating radar (GPR) internal-defect risk recognition.
-Given one B-scan image, the model predicts whether defect risk is present. The current release focuses on cross-domain
-generalization across public GPR-style datasets and real concrete specimens.
+Official code for GAFR-RegNet, a GPR B-scan image-level internal-defect risk recognition model.
+
+Given one B-scan image, the model predicts whether defect risk is present. The repository contains the model, training
+pipeline, dataset-view builders and a lightweight inference script.
 
 Author: li7forward
 
-## Main Idea
+## Method
 
-`GAFR-RegNet` uses a RegNetY-8GF semantic trunk and adds three B-scan-aware components:
+`GAFR-RegNet` uses a RegNetY-8GF semantic trunk with B-scan-specific risk evidence:
 
-- physics-guided feature recalibration for channel, time/depth and trace-axis responses;
-- a lateral trace-sequence branch for scan-direction response evolution;
-- a frequency-statistics branch for depth and trace spectral evidence;
-- gated residual fusion so trace/frequency evidence can help without overwhelming the base classifier.
+- physics-guided channel, time/depth and trace-axis feature recalibration;
+- a lateral trace-sequence branch;
+- a depth/trace frequency-statistics branch;
+- gated residual fusion of semantic, trace and frequency logits.
 
-The training wrapper adds multi-source domain adaptation:
-
-- gradient-reversal domain alignment;
-- class-conditional CORAL alignment;
-- validation-selected operating points for risk screening.
-
-Public backbones such as ConvNeXt, MaxViT, Swin, ViT, DenseNet, ResNet and EfficientNet are included as controlled
-baselines, not as the proposed method.
+The training wrapper supports multi-source domain generalization with gradient-reversal domain alignment and
+class-conditional CORAL alignment.
 
 ## Repository Layout
 
 ```text
 src/gpr_risk/
   models.py              # GAFR-RegNet and public backbone builders
-  transforms.py          # B-scan transforms and GPR physics-style augmentation
-  train.py               # training, validation, threshold selection and MSDA losses
+  transforms.py          # B-scan transforms and GPR-style augmentation
+  train.py               # training, validation and domain-alignment losses
 scripts/
-  create_lodo_views.py   # leave-one-domain-out dataset views
+  create_lodo_views.py   # leave-one-domain-out ImageFolder views
   create_allsource_view.py
   train_risk_model.py
-  summarize_runs.py
-  benchmark_complexity.py
-  predict_real_specimens.py
-  fewshot_real_calibration.py
-  visualize_gradcam.py
-  build_result_figures.py
+  predict_images.py
+  run_lodo_baselines.sh
 configs/
   gafr_regnet_lodo.yaml
 docs/
-  experiments.md
   model.md
-examples/
-  real_specimens/README.md
+  reproducibility.md
 ```
-
-Datasets, trained weights, server paths and manuscript files are intentionally not included.
 
 ## Installation
 
@@ -65,7 +52,7 @@ Install the PyTorch build that matches your CUDA version if the default wheel is
 
 ## Dataset Format
 
-Training uses ImageFolder-style splits:
+The training scripts use ImageFolder-style splits:
 
 ```text
 dataset_root/
@@ -80,7 +67,7 @@ dataset_root/
     no_damage/
 ```
 
-For leave-one-domain-out training, filenames should start with a source prefix such as:
+For multi-source training, filenames should start with a source prefix:
 
 ```text
 tigpr__train__sample.png
@@ -88,11 +75,11 @@ utility__val__sample.png
 urdd__test__sample.png
 ```
 
-The prefix is used only for domain-adaptation losses and per-domain validation.
+The prefix is used to infer the domain id for domain-alignment losses and per-domain validation.
 
-## Quick Start
+## Training
 
-Create LODO views:
+Create leave-one-domain-out views:
 
 ```bash
 python scripts/create_lodo_views.py \
@@ -102,7 +89,7 @@ python scripts/create_lodo_views.py \
   --out-root datasets/gpr_multisource_risk_lodo
 ```
 
-Train GAFR-RegNet on one view:
+Train GAFR-RegNet:
 
 ```bash
 python scripts/train_risk_model.py \
@@ -114,7 +101,7 @@ python scripts/train_risk_model.py \
   --selection-metric source_worst_min_cost
 ```
 
-Train a public strong baseline under the same protocol:
+Train a public backbone baseline under the same protocol:
 
 ```bash
 python scripts/train_risk_model.py \
@@ -125,55 +112,19 @@ python scripts/train_risk_model.py \
   --selection-metric source_worst_min_cost
 ```
 
-Summarize runs:
+## Inference
 
 ```bash
-python scripts/summarize_runs.py --runs runs/gafr_regnet_lodo_urdd runs/convnext_small_lodo_urdd
-```
-
-Generate Grad-CAM overlays:
-
-```bash
-python scripts/visualize_gradcam.py \
+python scripts/predict_images.py \
+  --input path/to/bscan_or_folder \
   --run-dir runs/gafr_regnet_lodo_urdd \
-  --images examples/real_specimens/foam_line1.png \
-  --out-dir outputs/gradcam
-```
-
-## Real Specimen Validation
-
-The real-specimen scripts assume four specimen types with two scan lines each:
-
-- foam surrogate: low-density void surrogate;
-- plain concrete: negative control;
-- steel pipe: metallic pipe / strong reflector;
-- plastic pipe: non-metallic pipe or PVC-like inclusion.
-
-Run fixed-threshold screening:
-
-```bash
-python scripts/predict_real_specimens.py \
-  --input-root examples/real_specimens \
-  --run-dir runs/gafr_regnet_allsource \
-  --out-dir outputs/source_data
-```
-
-Run line-heldout few-shot calibration:
-
-```bash
-python scripts/fewshot_real_calibration.py \
-  --input-root examples/real_specimens \
-  --run-dir runs/gafr_regnet_allsource \
-  --out-dir outputs/source_data
+  --out predictions.csv
 ```
 
 ## Open-Source Scope
 
-This release contains only code and lightweight documentation. It does not include:
-
-- private datasets or downloaded public datasets;
-- model weights or experiment logs;
-- server credentials, absolute server paths or manuscript packages.
+This repository only includes code that is suitable for public release. It does not include datasets, checkpoints,
+manuscript-specific post-processing utilities, private validation scripts, server paths or credentials.
 
 ## License
 
